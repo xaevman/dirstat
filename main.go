@@ -5,6 +5,7 @@ import (
     "fmt"
     "os"
     "path/filepath"
+    "strings"
 )
 
 const (
@@ -23,6 +24,9 @@ var (
     totalSize      uint64
     fileCount      uint64
     directoryCount uint64
+    currentDir     string
+    sizeMap        map[string]uint64 = make(map[string]uint64)
+    errList        []error           = make([]error, 0)
 )
 
 func main() {
@@ -34,50 +38,81 @@ func main() {
 }
 
 func walkPath() {
-    filepath.Walk(targetDir, onWalkDir)
+    err := filepath.Walk(targetDir, onWalkDir)
+    if err != nil {
+        panic(err)
+    }
 }
 
-func getSizeStr() string {
-    if totalSize / TB >= 1 {
-        return fmt.Sprintf("%.2f TB (%d Bytes)", float64(totalSize) / TB, totalSize)
+func getSizeStr(size uint64) string {
+    if size / TB >= 1 {
+        return fmt.Sprintf("%.2f TB (%d Bytes)", float64(size) / TB, size)
     }
 
-    if totalSize / GB >= 1 {
-        return fmt.Sprintf("%.2f GB  (%d Bytes)", float64(totalSize) / GB, totalSize)
+    if size / GB >= 1 {
+        return fmt.Sprintf("%.2f GB  (%d Bytes)", float64(size) / GB, size)
     }
 
-    if totalSize / MB >= 1 {
-        return fmt.Sprintf("%.2f MB  (%d Bytes)", float64(totalSize) / MB, totalSize)
+    if size / MB >= 1 {
+        return fmt.Sprintf("%.2f MB  (%d Bytes)", float64(size) / MB, size)
     }
 
-    if totalSize / KB >= 1 {
-        return fmt.Sprintf("%.2f KB  (%d Bytes)", float64(totalSize) / KB, totalSize)
+    if size / KB >= 1 {
+        return fmt.Sprintf("%.2f KB  (%d Bytes)", float64(size) / KB, size)
     }
 
-    return fmt.Sprintf("%d Bytes", totalSize)
+    return fmt.Sprintf("%d Bytes", size)
 }
 
 func printSummary() {
     fmt.Printf(
-        "\n*** Walk complete (files: %d, directories: %d, size: %s\n",
+        "\nWalk complete. (files: %d, directories: %d, errors: %d)\n",
         fileCount,
         directoryCount,
-        getSizeStr(),
+        len(errList),
+    )
+
+    for i := range errList {
+        fmt.Println(errList[i])
+    }
+
+    fmt.Printf(
+        "\n*** Total Size: %s\n",
+        getSizeStr(totalSize),
     )
 }
 
 func onWalkDir(path string, info os.FileInfo, err error) error {
     if err != nil {
-        return err
+        errList = append(errList, err)
+        return nil
     }
 
+    sPath := strings.Replace(path, targetDir, "", -1)
+    pathParts := strings.Split(sPath, string(os.PathSeparator))
+    subDir := sPath
+    if len(pathParts) > 1 {
+        subDir = pathParts[1]
+    }
+    
+    _, ok := sizeMap[subDir]
+    if !ok {
+        fmt.Printf(" (size: %s)\n", getSizeStr(sizeMap[currentDir]))
+
+        currentDir = subDir
+        sizeMap[currentDir] = 0
+        fmt.Printf("Entering subdirectory %s...", currentDir)
+    }
+    
     if info.IsDir() {
-        fmt.Printf("Walking directory %s...\n", path)
         directoryCount++
         return nil
     }
 
-    totalSize += uint64(info.Size())
+    fileSize := uint64(info.Size())
+    sizeMap[subDir] += fileSize
+    totalSize += fileSize
     fileCount++
+
     return nil
 }
