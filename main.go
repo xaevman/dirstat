@@ -39,6 +39,8 @@ func main() {
 
 func walkPath() {
     err := filepath.Walk(targetDir, onWalkDir)
+    fmt.Printf(" (size: %s)\n", getSizeStr(sizeMap[currentDir]))
+
     if err != nil {
         panic(err)
     }
